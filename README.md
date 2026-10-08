@@ -26,9 +26,9 @@ python -m pip install -r requirements.txt
 
 | Item | 判定 |
 | --- | --- |
-| 15.1 Multi-language / country? | 确认单语言、单地区 N/A；确认多版本且首页切换正常 √；确认多版本但无可用切换入口或切换失败 X；尚不能确认 Human check。 |
-| 15.2 URL structure | ccTLD、语言/地区子目录、子域名 √；语言/地区参数 URL X，以温和建议说明；15.1 确认单语言时 N/A。切换失败不会让此项自动 N/A。 |
-| 15.3 Hreflang issues | 用户明确跳过 → N/A；否则，六项 SF filters 任何一项有问题 URL → X；没有发现问题 URL → √。其中「结果为空」与「未取得结果」必须在 Findings / Coverage 分别说明，详见下表。 |
+| **15.1 Multi-language / country?** | **检查什么：**查看首页渲染后的 header、footer、菜单和语言／地区选择器，结合实际版本 URL、目标页面及已有 hreflang 记录，确认是否有多个语言或地区版本，并检查首页切换是否可用。同一语言的不同地区版本也算，例如 en-HK 与 en-SG。<br><br>**√：**已确认存在多个版本，且检查到的首页切换入口能正常到达对应版本。<br>**X：**已确认存在多个版本，但首页没有可用切换入口，或实际操作发现切换失败；将首页地址、缺失入口／失败行为及修正建议放入问题页。<br>**N/A：**已确认网站只有单语言、单地区版本。<br>**Human check：**无法确认是否有多个版本，或无法检查切换行为。仅首页没看到按钮、HTML lang、JS 中出现语言字样或单个自引用 hreflang，都不足以直接确认多语言或单语言。<br><br>**报告记录：**Findings 写已发现的版本及切换结果；Coverage 写实际检查的页面、入口、目标 URL 和未验证部分。 |
+| **15.2 URL structure** | **检查什么：**使用实际语言／地区版本 URL 判断结构；不只看主域名，也不把普通 tracking 参数当成语言参数。<br><br>**√：**采用 ccTLD（example.de、example.com.hk）、语言／地区子目录（example.com/en/）或子域名（en.example.com）；默认语言直接使用根目录也可以。<br>**X：**确认使用 ?lang=en 等参数区分语言／地区版本；混合结构中发现这种形式也按本 checklist 列为优化项。<br>**N/A：**15.1 已确认单语言、单地区。15.1 因切换问题记 X 时，仍继续检查此项。<br>**Human check：**版本 URL 或结构尚不能确认；只靠同一 URL 的 cookie／JS 切换时，提示人工评估独立版本 URL。<br><br>**报告记录：**Findings 写实际结构及代表 URL，Coverage 写已检查哪些版本。参数形式的 Finding 使用「目前使用语言参数区分版本，按本 checklist 列为可优化项」；Instruction 使用「可在后续网站规划时考虑语言子目录或子域名，结合现有收录情况与迁移成本评估」，保持温和建议语气。 |
+| **15.3 Hreflang issues** | **检查什么：**读取现有 SF crawl 的六项结果：Missing、Missing Return Links、Missing Self Reference、Non-Canonical Return Links、Incorrect Language & Region Codes、Non-200 Hreflang URLs。<br><br>**N/A：**用户明确说本次不检查 15.3，优先按跳过处理；15.1 单语言 N/A 不会自动跳过此项。<br>**X：**未跳过时，任意一个 filter 有至少一个实际问题 URL 就 raise，包括 Missing；即使其他 filters 为空或未取得，仍记 X。所有已取得的问题记录进入问题页，列出 source Address、问题类型、已知 target URL 及处理建议。<br>**√（结果为空）：**六项均已取得且没有问题 URL，包括 0 条、空表、空白、null、none 或 NaN。Findings 写「已读取的六项 SF 结果均未发现问题 URL」；Coverage 写真实数据来源、crawl 日期及覆盖范围。<br>**√（部分／全部结果未取得）：**在没有任何已知问题 URL 的前提下，按约定暂记初审 √。Findings 必须提醒「尚未取得〔具体 filters／全部 SF 结果〕，建议补充后确认」；Coverage 标明「部分未验证」或「未取得结果，未验证」。不能写成全站已验证正常。<br><br>**注意：**Missing filter 中的 URL 是已发现的问题，记 X；缺少导出文件或读取失败是未取得结果，按上述初审规则处理。空值不能覆盖其他有效问题 URL。下表给出判断顺序和完整写法。 |
 
 六个 filters：Missing、Missing Return Links、Missing Self Reference、Non-Canonical Return Links、Incorrect Language & Region Codes、Non-200 Hreflang URLs。SF Missing 有记录直接 raise，不再逐页判断是否需要其他语言版本。单语言本身不自动跳过 15.3；用户可以明确排除。
 
