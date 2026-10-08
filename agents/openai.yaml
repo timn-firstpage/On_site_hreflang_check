@@ -1,0 +1,4 @@
+interface:
+  display_name: "Onsite Hreflang Audit"
+  short_description: "Audit hreflang with shared SF config and Excel reporting"
+  default_prompt: "Use $onsite-audit-hreflang to audit this site's language switching, locale URLs and saved SF hreflang results using my global config."

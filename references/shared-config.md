@@ -1,0 +1,13 @@
+# Shared global configuration
+
+Reuse [sf-shared-config](https://github.com/timn-firstpage/On-_site_SF_shared_config), reading its installed SKILL.md or accessible sibling checkout. Do not bundle or fork its SF profiles. Read its `references/saved-crawl-entry.md` for existing files. The shared skill controls evidence acquisition; this skill controls the scoring exceptions in audit-rules.md.
+
+Use existing `site/source/mcp/budget/cache/output` unchanged. This flow owns only `checks.hreflang` (default true when invoked, false disables it). `checks.live_checks=false` prevents new website reads, including live browser interaction, but not local parsing or supported retrieval of saved exports. `source.allow_new_crawl` never starts a crawl automatically. Reuse cumulative request/MCP budgets and existing shared handover records across flows, not fresh budgets for each filter.
+
+The JSON template is a standalone fallback when no global config is supplied. Config handling is agent-owned: it does not configure SF/MCP or execute any script just by being present. Relative input/output paths resolve against the supplied config directory. Resolve runtime/site/timezone on the actual host; date defaults to the user's local date (Asia/Hong_Kong for this workflow's owner). The report generator takes explicit findings and destination, not the global config.
+
+Explicit user-provided crawl takes precedence over stale session IDs. Use source.mode=saved_crawl and source.crawl_file. Preserve inputs and active/unsaved sessions. Reuse matching complete exports or open the saved crawl once using verified SF capabilities. No supported reader or a rejected import: provide manual File > Open plus the six named exports; do not suggest Configuration > Load + Start. A .seospiderconfig is not a saved crawl. Never inspect a live DB using an invented deserializer.
+
+For missing evidence requiring a permitted new crawl, route to sf-shared-config. Its default full-site profile is onsite-main-js; it stages the verified profile into the actual SF host Downloads, handles manual loading, site/sitemap confirmation, manual Start and saved-crawl handover. Do not reload over site-specific edits or an active crawl. Discover actual tools; never assume an MCP name or CLI capability from this template.
+
+Store provenance in the shared run manifest: config/handover paths, site/hosts, crawl ID/time/state, export paths and filters, row counts, complete/truncated flags, unavailable fields, render context, homepage evidence and cumulative budget usage. Cache complete exports by unchanged source and filter/context. Label live versus historical evidence. No reader, missing scope or failed retrieval must remain visible even when 15.3 is √ by the user's policy.
