@@ -21,6 +21,8 @@ These are the user's initial-check policy, agreed 2026-10-08. The three items ar
 
 Read these SF Hreflang filters, mapping actual installed-version labels explicitly:
 
+Decision precedence: (1) explicit user skip → N/A; (2) otherwise any known issue URL → X even if other filters are unavailable; (3) otherwise √, distinguishing all six available and empty, partially available and empty, and entirely unavailable. For the last two cases disclose missing filters/results and unverified coverage. An SF **Missing** row is a reported issue; a **missing export** is unavailable evidence. Never confuse these meanings. Example: three Missing URLs plus five unavailable filters → X with three detail records and partial Coverage. One empty Missing result plus five unavailable filters → √ with a partial-results reminder.
+
 1. Missing
 2. Missing Return Links
 3. Missing Self Reference
