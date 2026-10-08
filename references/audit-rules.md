@@ -4,6 +4,8 @@ These are the user's initial-check policy, agreed 2026-10-08. The three items ar
 
 ## 15.1 Multi-language / country?
 
+Use [code-based inspection](homepage-inspection.md); do not use computer-use tools. Static evidence can establish alternate URLs and detect broken target responses; distinguish an HTTP route check from an actual JS/control interaction. Where a static link check is sufficient for a first-pass assessment, explicitly label it as a link-target check, never claim it was clicked. Confirm target locale/content and usable control evidence before √. Programmatic Playwright can provide rendered/interaction evidence when necessary. A missing browser runtime, blocked resource or inability to click is not an observed website switch failure.
+
 - Discover actual language or region versions from homepage controls, rendered navigation, real destination content and existing SF annotations (HTML, HTTP Link headers or XML sitemap). Same-language regional variants count. A homepage without controls does not establish a single-language site. HTML lang, generic JS locale strings, currency-only controls or one self-reference alone are insufficient.
 - Confirmed single language and single region: N/A, explain the evidence. This is not a defect.
 - Confirmed multiple versions with a working homepage switch: √.
@@ -11,6 +13,8 @@ These are the user's initial-check policy, agreed 2026-10-08. The three items ar
 - Existence of versions or switch behavior cannot be established: Human check with an actionable verification request. Preserve any confirmed issue even if other observations are incomplete.
 
 ## 15.2 Parameter? (i.e. ?lang=en) or ccTLD or others?
+
+Determine structure from established version URLs in static HTML, HTTP Link headers, saved SF/sitemap annotations or code-rendered evidence. Do not make 15.2 depend on successful browser clicking or on the homepage URL changing. A known /en/ or ?lang=en target remains classifiable when interaction testing is unavailable. The helper's structure labels are candidates; verify they are actual locale URLs. For a real same-URL content switch, 15.1 can pass while 15.2 follows its same-URL Human check rule.
 
 - Inspect actual locale URLs, not merely the root domain. ccTLD (example.de/example.com.hk), locale directories (example.com/en/, /zh-hant/), and locale subdomains (en.example.com) pass √. These are accepted structures, not a ranking among the three.
 - Confirmed language/region query parameters such as ?lang=en: X under this local checklist. Tracking parameters do not count. Mixed structures with any confirmed locale-parameter implementation are X. Default-language root URLs are allowed.

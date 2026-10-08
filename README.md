@@ -6,6 +6,8 @@
 
 Skill 名称：`onsite-audit-hreflang`。入口：[SKILL.md](SKILL.md)。本包由 agent 负责取证和判断，Python 生成器负责校验与排版；不是独立网站爬虫，也不直接解析 SF 二进制数据库。
 
+**15.1／15.2 使用代码取证，不需要模型具备 computer use 能力。** Python 标准库读取 HTML、语言入口、hreflang 和候选地址；纯 JS 控件可选用 Playwright 脚本测试。各模型使用同一套脚本与 JSON 证据。模型仍需能运行代码，或由外部执行器返回结果。
+
 ## 安装与使用
 
 把本仓库根目录复制或链接为 Codex skills 目录下的 `onsite-audit-hreflang`，然后刷新技能列表。SF 新 crawl 准备依赖另行安装的 `sf-shared-config`；已有适用 crawl/exports 可直接复用。仓库 clone 本身不代表 skill 已安装。
@@ -23,6 +25,26 @@ python -m pip install -r requirements.txt
 提供网站、公司名、global config 路径及 crawl/导出位置。日期默认按用户时区当天填写。无 global config 时可复制 [config.template.json](config.template.json) 到独立 run 目录填写。模板中的 MCP 名称是待发现的提示，不代表已建立连接。
 
 ## 检查逻辑
+
+### 先用代码取证
+
+优先使用已有 HTML／SF 导出；允许 live checks 时，检查首页及少量语言版本地址。**15.2 直接依据已找到的真实版本 URL 判断，不要求先点击成功，也不要求首页 URL 改变。**
+
+```text
+# 离线解析保存的首页，不访问网络
+python scripts/inspect_homepage.py --config path/to/global-config.json --html path/to/homepage.html --output-dir runs/home-offline-001
+
+# 从 global config 的剩余预算分配 12 次请求，最多检查 6 个候选地址
+python scripts/inspect_homepage.py --config path/to/global-config.json --remaining-requests 12 --max-targets 6 --output-dir runs/home-http-001
+```
+
+脚本输出 `homepage-evidence.json` 和 HTML 存档，包含入口文字与地址、hreflang、响应状态、最终 URL、内容摘要及未检查部分。每次使用新的输出目录，并把实际请求数计入共享预算。
+
+需要执行 JS 时，可选安装 `requirements-browser.txt` 与 Chromium，再加 `--render`；根据实际页面中的语言选择器，可用 `--selector` 和 `--option-value` 测试一个控件。全部由代码执行，不调用 computer-use 工具。完整安装、命令和边界见 [代码取证说明](references/homepage-inspection.md)。
+
+如果没有浏览器运行组件，仍先完成静态取证和能够确定的 URL 结构检查。只有 JS 行为确实无法确认时才说明这一项的具体缺口；不得把「运行环境无法测试」写成「网站切换失败」。脚本观察到变化也不自动判通过，需确认变化确实对应目标语言／地区。
+
+### 判定规则
 
 | Item | 判定 |
 | --- | --- |
@@ -104,12 +126,15 @@ python scripts/build_report.py --input examples/findings.json --output-dir runs/
 
 示例包含正常切换、参数 URL 优化项和未取得 SF 结果，预期两张表，问题页只有 15.2。再次运行需换 run 目录。测试覆盖无 X 只有一页、所有 X 进入详情、缺失结果提醒、N/A、非法输入、公式样式文本按文字保存及防覆盖。
 
-真实验收：提供一个正常网站和一个已知异常网站的保存 crawl/exports，人工对照六个 filters 的实际问题数量与代表 URL，再核对首页切换、报告全部问题行和两页排版。模拟测试不证明真实 SF/MCP 接入或 SEO 结论正确。
+首页脚本测试包含：嵌套语言链接、HTML／HTTP header hreflang、下拉选项、字面量 JS 跳转地址、独立 URL 结构判断、禁止联网模式、请求预算和跨域重定向限制。浏览器组件缺失不影响这些基础测试；可选 JS 路线需在安装 Playwright／Chromium 的环境另行验收。
+
+真实验收：提供一个正常网站和一个已知异常网站的保存 crawl/exports，人工对照六个 filters 的实际问题数量与代表 URL，再核对代码记录的首页切换、报告全部问题行和两页排版。模拟测试不证明真实 SF/MCP 接入或 SEO 结论正确。
 
 ## 文件与团队运行
 
 - `SKILL.md`：执行入口；`references/`：判定、输出与 shared config 合约。
 - `scripts/build_report.py`：固定报告生成器；`examples/findings.json`：明确标注的模拟数据。
+- `scripts/inspect_homepage.py`：零额外依赖的 HTML／HTTP 取证；`scripts/render_homepage.py`：可选 Playwright 运行组件。
 - `runs/`：忽略的本地报告、完整导出、manifest 和 findings；不提交客户数据或凭据。
 
 同事在各自执行机器安装 skill 和 Python 依赖，并提供该机器可访问的 SF 文件和可写输出目录。GitHub 导入不会自动提供 SF 权限、运行环境或客户数据。执行 audit 不会自动修改网站或发布仓库内容。
