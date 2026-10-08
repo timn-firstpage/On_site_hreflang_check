@@ -71,6 +71,20 @@ python -m pip install -r requirements.txt
 
 所有 X 都有问题详情；一条 source/issue/target 一行，target 放 Issue。Human check 和 N/A 不进入问题页。无 X 时只输出 Checklist。保留冻结表头、自动筛选、换行及结果颜色，客户文本以 literal text 保存。
 
+### 报告用语：easy to read
+
+Findings、Issue、Instruction、Coverage 和缺失资料提醒都要让非技术读者容易理解。先说发现了什么，再给具体下一步；尽量用一两句短句，不堆叠术语。必要时保留 SF filter 名称，并用通俗语言解释意思。每行写一个具体问题，保留真实 URL、数量和未检查范围。
+
+| 字段 | 写什么 | 推荐写法示例 |
+| --- | --- | --- |
+| Findings | 简短说明检查结果 | 网站有中文和英文版本，首页可正常切换。 |
+| Issue | 具体问题，必要时附目标 URL | 英文页面没有 hreflang 链接指回中文页面（Missing Return Links）。目标页面：〔实际 URL〕。 |
+| Instruction | 明确、可执行的下一步 | 请在英文页面添加指向对应中文页面的 hreflang 链接。 |
+| Coverage | 实际检查范围及缺口 | 已读取 Missing，未发现问题。其余五项尚未取得。 |
+| 缺失资料提醒 | 说明暂记结果和待确认内容 | 尚未取得 SF 结果，本次先记 √。请补充结果后确认。 |
+
+语言参数问题保持温和：Finding 可写「语言版本使用 ?lang=en 区分，列为可优化项」；Instruction 可写「可在后续改版时考虑语言子目录或子域名，并评估收录影响和调整成本」。避免只写「优化 hreflang」等笼统建议，也不要为简短而省略未验证提醒。
+
 Agent 先按 [output-contract.md](references/output-contract.md) 写 findings.json，运行：
 
 ```text
