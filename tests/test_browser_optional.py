@@ -15,6 +15,13 @@ from render_homepage import render
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
+        if self.path == '/limited':
+            self.send_response(429)
+            self.send_header('Content-Type', 'text/html')
+            self.send_header('Retry-After', '120')
+            self.end_headers()
+            self.wfile.write(b'<html><img src="/must-not-fetch"><p>Too many requests</p></html>')
+            return
         body = b'''<html lang="en"><body><p id="text">English version</p>
         <select id="language" onchange="document.documentElement.lang=this.value;document.getElementById('text').textContent=this.value==='zh'?'Chinese version':'English version'">
         <option value="en">English</option><option value="zh">Chinese</option></select>
@@ -47,7 +54,7 @@ class BrowserTests(unittest.TestCase):
         run_root = ROOT / 'runs'
         run_root.mkdir(exist_ok=True)
         with tempfile.TemporaryDirectory(dir=run_root) as tmp:
-            f = Fetcher(['127.0.0.1'], 10)
+            f = Fetcher(['127.0.0.1'], 10, min_interval=0)
             result = render(f'http://127.0.0.1:{self.server.server_port}/', f, '#language', 'zh', Path(tmp))
             self.assertEqual(result['state'], 'rendered', result)
             self.assertEqual(result['switch'], 'observed_change')
@@ -57,6 +64,16 @@ class BrowserTests(unittest.TestCase):
             self.assertEqual(result['after']['html_lang'], 'zh')
             self.assertGreater(f.used, 0)
             self.assertTrue((Path(tmp) / 'rendered-after.html').exists())
+
+    def test_browser_429_stops_resource_requests(self):
+        run_root = ROOT / 'runs'
+        run_root.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=run_root) as tmp:
+            f = Fetcher(['127.0.0.1'], 10, min_interval=0)
+            result = render(f'http://127.0.0.1:{self.server.server_port}/limited', f, None, None, Path(tmp))
+            self.assertEqual(result['state'], 'rate_limited', result)
+            self.assertEqual(f.rate_limit['suggested_wait_seconds'], 120)
+            self.assertEqual(f.used, 1)
 
 
 if __name__ == '__main__':

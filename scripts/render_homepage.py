@@ -4,6 +4,9 @@ from inspect_homepage import parse_page
 
 def render(url, fetcher, selector, option_value, output_dir):
     result = {'state': 'unavailable', 'blocked': [], 'switch': 'not_tested'}
+    if fetcher.rate_limit:
+        result.update(state='skipped_after_429', rate_limit=fetcher.rate_limit)
+        return result
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
@@ -20,15 +23,16 @@ def render(url, fetcher, selector, option_value, output_dir):
                     while previous:
                         hops += 1
                         previous = previous.redirected_from
-                    if request.method != 'GET' or not fetcher.permitted(request.url) or fetcher.remaining <= 0 or hops > fetcher.max_redirects:
-                        result['blocked'].append({'url': request.url, 'method': request.method, 'reason': 'method_scope_or_budget'})
+                    error = 'method_or_redirect_limit' if request.method != 'GET' or hops > fetcher.max_redirects else fetcher.acquire(request.url)
+                    if error:
+                        result['blocked'].append({'url': request.url, 'method': request.method, 'reason': error})
                         route.abort()
                         return
-                    fetcher.remaining -= 1
-                    fetcher.used += 1
                     try:
                         # Disable automatic redirect following here; browser redirect hops get routed again.
                         response = route.fetch(max_redirects=0, timeout=fetcher.timeout * 1000)
+                        if response.status == 429:
+                            fetcher.record_429(request.url, response.headers.get('retry-after'))
                         route.fulfill(response=response)
                     except Exception as exc:
                         result['blocked'].append({'url': request.url, 'reason': str(exc)})
@@ -38,6 +42,9 @@ def render(url, fetcher, selector, option_value, output_dir):
                 page.set_default_timeout(fetcher.timeout * 1000)
                 response = page.goto(url, wait_until='domcontentloaded')
                 page.wait_for_timeout(1000)
+                if fetcher.rate_limit:
+                    result.update(state='rate_limited', rate_limit=fetcher.rate_limit)
+                    return result
                 before_html = page.content()
                 before = parse_page(before_html, page.url)
                 (output_dir / 'rendered-before.html').write_text(before_html, encoding='utf-8')
@@ -53,6 +60,9 @@ def render(url, fetcher, selector, option_value, output_dir):
                     else:
                         control.click()
                     page.wait_for_timeout(1500)
+                    if fetcher.rate_limit:
+                        result.update(state='rate_limited', rate_limit=fetcher.rate_limit, switch='not_verified_due_to_429')
+                        return result
                     after_html = page.content()
                     after = parse_page(after_html, page.url)
                     (output_dir / 'rendered-after.html').write_text(after_html, encoding='utf-8')
@@ -65,4 +75,6 @@ def render(url, fetcher, selector, option_value, output_dir):
                 browser.close()
     except Exception as exc:
         result.update(state='incomplete', reason=str(exc))
+        if fetcher.rate_limit:
+            result.update(state='rate_limited', rate_limit=fetcher.rate_limit)
     return result

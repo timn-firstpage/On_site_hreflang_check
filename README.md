@@ -40,6 +40,12 @@ python scripts/inspect_homepage.py --config path/to/global-config.json --remaini
 
 脚本输出 `homepage-evidence.json` 和 HTML 存档，包含入口文字与地址、hreflang、响应状态、最终 URL、内容摘要及未检查部分。每次使用新的输出目录，并把实际请求数计入共享预算。
 
+**请求限速：**默认每次请求至少间隔 2 秒，HTTP 页面、重定向和 Playwright 资源共用间隔；可通过 global config 的 `budget.min_request_interval_seconds` 调整。这个设置不改变 SF 或其他程序的请求速度，也不能保证所有网站都接受该速率。
+
+**遇到 HTTP 429：**立即停止本轮后续请求，不自动重试，也不转用 Playwright 继续访问。JSON 记录返回 429 的 URL、`Retry-After` 和最早可再次尝试的时间；后续运行应先遵守等待时间并复用已有证据。没有有效 `Retry-After` 时建议至少等 60 秒再评估，并不保证届时恢复。不要同时启动多个 audit 持续访问同一网站。
+
+报告用语示例：「首页请求被限流（HTTP 429），本次未能检查语言切换。」这表示检查受到访问限制，不证明网站切换功能坏了。已有版本 URL 仍可用于 15.2；实际 SF 六项问题结果仍按 15.3 的约定判定。
+
 需要执行 JS 时，可选安装 `requirements-browser.txt` 与 Chromium，再加 `--render`；根据实际页面中的语言选择器，可用 `--selector` 和 `--option-value` 测试一个控件。全部由代码执行，不调用 computer-use 工具。完整安装、命令和边界见 [代码取证说明](references/homepage-inspection.md)。
 
 如果没有浏览器运行组件，仍先完成静态取证和能够确定的 URL 结构检查。只有 JS 行为确实无法确认时才说明这一项的具体缺口；不得把「运行环境无法测试」写成「网站切换失败」。脚本观察到变化也不自动判通过，需确认变化确实对应目标语言／地区。

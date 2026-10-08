@@ -1,4 +1,6 @@
 from email.message import Message
+from datetime import datetime, timezone, timedelta
+from email.utils import format_datetime
 from io import BytesIO
 import json
 from pathlib import Path
@@ -6,9 +8,11 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from inspect_homepage import Fetcher, collect, parse_page, structure
+from render_homepage import render
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -88,12 +92,47 @@ class HomepageTests(unittest.TestCase):
         self.assertEqual(len(f.opener.calls), 1)
 
     def test_target_response_and_limit(self):
-        f = Fetcher(['example.com'], 4)
+        f = Fetcher(['example.com'], 4, min_interval=0)
         f.opener = Opener([Response(200, '<a href="/zh/">中文</a><a href="/en/">English</a>'), Response(404, 'Not found')])
         result = collect('https://example.com/', f, max_targets=1)
         self.assertEqual(result['targets'][0]['status'], 404)
         self.assertEqual(result['unchecked_targets'], ['https://example.com/en/'])
         self.assertEqual(f.used, 2)
+
+    def test_request_spacing(self):
+        f = Fetcher(['example.com'], 2)
+        with patch('inspect_homepage.time.monotonic', side_effect=[100, 100.4, 102]), patch('inspect_homepage.time.sleep') as sleep:
+            self.assertIsNone(f.acquire('https://example.com/'))
+            self.assertIsNone(f.acquire('https://example.com/zh/'))
+            self.assertAlmostEqual(sleep.call_args.args[0], 1.6)
+        self.assertEqual(f.used, 2)
+
+    def test_429_stops_followups_and_render(self):
+        f = Fetcher(['example.com'], 20, min_interval=0)
+        f.opener = Opener([Response(429, '<a href="/zh/">Chinese</a>', **{'Retry-After': '120'})])
+        result = collect('https://example.com/', f)
+        self.assertEqual(result['homepage_response']['status'], 429)
+        self.assertNotIn('homepage', result)  # A limit/error page is not the real homepage.
+        self.assertEqual(f.rate_limit['suggested_wait_seconds'], 120)
+        self.assertTrue(f.rate_limit['retry_after_valid'])
+        self.assertEqual(f.fetch('https://example.com/zh/')['error'], 'stopped_after_429')
+        self.assertEqual(render('https://example.com/', f, None, None, Path('.'))['state'], 'skipped_after_429')
+        self.assertEqual(len(f.opener.calls), 1)
+        self.assertEqual(f.used, 1)
+
+    def test_retry_after_date_and_invalid_header(self):
+        f = Fetcher(['example.com'], 3)
+        f.record_429('https://example.com/', format_datetime(datetime.now(timezone.utc) + timedelta(seconds=120)))
+        self.assertTrue(f.rate_limit['retry_after_valid'])
+        self.assertTrue(119 <= f.rate_limit['suggested_wait_seconds'] <= 120)
+        f.record_429('https://example.com/', 'invalid')
+        self.assertFalse(f.rate_limit['retry_after_valid'])
+        self.assertEqual(f.rate_limit['suggested_wait_seconds'], 60)
+
+    def test_interval_must_be_nonnegative_and_finite(self):
+        for interval in [-1, float('nan'), float('inf')]:
+            with self.assertRaises(ValueError):
+                Fetcher(['example.com'], 1, min_interval=interval)
 
     def test_offline_cli_and_live_disabled(self):
         run_root = ROOT / 'runs'

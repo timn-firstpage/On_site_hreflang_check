@@ -29,6 +29,7 @@
   "budget": {
     "max_mcp_calls": 30,
     "max_live_requests": 200,
+    "min_request_interval_seconds": 2,
     "max_redirect_hops": 5,
     "timeout_seconds": 15,
     "poll_interval_seconds": 30,

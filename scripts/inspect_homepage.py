@@ -1,10 +1,13 @@
 """Bounded homepage/alternate evidence collection; no computer-use tool required."""
 import argparse
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 import json
+import math
 from pathlib import Path
 import re
+import time
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urljoin, urlsplit, urldefrag
 from urllib.request import Request, build_opener, HTTPRedirectHandler
@@ -133,13 +136,59 @@ class NoRedirect(HTTPRedirectHandler):
 
 
 class Fetcher:
-    def __init__(self, hosts, budget, timeout=15, max_redirects=5):
+    def __init__(self, hosts, budget, timeout=15, max_redirects=5, min_interval=2):
         self.hosts = set(hosts)
         self.remaining = budget
         self.used = 0
         self.timeout = timeout
         self.max_redirects = max_redirects
+        self.min_interval = float(min_interval)
+        if not math.isfinite(self.min_interval) or self.min_interval < 0:
+            raise ValueError('min_request_interval_seconds must be finite and nonnegative')
+        self.last_request_at = None
+        self.rate_limit = None
         self.opener = build_opener(NoRedirect())
+
+    def acquire(self, url):
+        """Shared pacing and stop state for HTTP pages, redirects and browser resources."""
+        if self.rate_limit:
+            return 'stopped_after_429'
+        if not self.permitted(url):
+            return 'host_out_of_scope'
+        if self.remaining <= 0:
+            return 'request_budget_exhausted'
+        if self.last_request_at is not None:
+            delay = self.min_interval - (time.monotonic() - self.last_request_at)
+            if delay > 0:
+                time.sleep(delay)
+        self.last_request_at = time.monotonic()
+        self.remaining -= 1
+        self.used += 1
+        return None
+
+    def record_429(self, url, retry_after):
+        now = datetime.now(timezone.utc)
+        raw = str(retry_after or '').strip()
+        valid = False
+        seconds = 60
+        try:
+            if re.fullmatch(r'\d+', raw):
+                seconds = int(raw)
+            else:
+                when = parsedate_to_datetime(raw)
+                if when.tzinfo is None:
+                    when = when.replace(tzinfo=timezone.utc)
+                seconds = max(0, math.ceil((when - now).total_seconds()))
+            not_before = now + timedelta(seconds=seconds)
+            valid = True
+        except (TypeError, ValueError, OverflowError):
+            seconds = 60
+            not_before = now + timedelta(seconds=seconds)
+        self.rate_limit = {'url': url, 'status': 429, 'observed_at': now.isoformat(),
+                           'retry_after_raw': raw, 'retry_after_valid': valid,
+                           'retry_not_before': not_before.isoformat(),
+                           'suggested_wait_seconds': seconds,
+                           'action': 'Stop this run. No automatic retry. Honor the server wait; if absent, the 60s suggestion is not a guarantee of recovery.'}
 
     def permitted(self, url):
         p = urlsplit(url)
@@ -148,12 +197,9 @@ class Fetcher:
     def fetch(self, url):
         original, chain = url, []
         for hop in range(self.max_redirects + 1):
-            if not self.permitted(url):
-                return {'requested_url': original, 'url': url, 'error': 'host_out_of_scope', 'redirects': chain}
-            if self.remaining <= 0:
-                return {'requested_url': original, 'url': url, 'error': 'request_budget_exhausted', 'redirects': chain}
-            self.remaining -= 1
-            self.used += 1
+            error = self.acquire(url)
+            if error:
+                return {'requested_url': original, 'url': url, 'error': error, 'redirects': chain}
             try:
                 try:
                     response = self.opener.open(Request(url, headers={'User-Agent': 'OnsiteHreflangAudit/1.0', 'Accept': 'text/html'}), timeout=self.timeout)
@@ -161,6 +207,10 @@ class Fetcher:
                     response = exc
                 with response:
                     status = response.code
+                    if status == 429:
+                        self.record_429(url, response.headers.get('Retry-After'))
+                        return {'requested_url': original, 'url': url, 'status': 429,
+                                'error': 'http_429', 'redirects': chain, 'rate_limit': self.rate_limit}
                     if status in {301, 302, 303, 307, 308}:
                         target = web_url(url, response.headers.get('Location'))
                         chain.append({'url': url, 'status': status, 'target': target})
@@ -243,7 +293,8 @@ def main():
         if not args.html and allocation == 0:
             raise ValueError('Live mode requires --remaining-requests from the shared remaining budget')
         hosts = config.get('site', {}).get('allowed_hosts') or [urlsplit(home).hostname]
-        fetcher = Fetcher(hosts, allocation, budget.get('timeout_seconds', 15), budget.get('max_redirect_hops', 5))
+        fetcher = Fetcher(hosts, allocation, budget.get('timeout_seconds', 15), budget.get('max_redirect_hops', 5),
+                          budget.get('min_request_interval_seconds', 2))
         args.output_dir.mkdir(parents=True, exist_ok=False)
         html = args.html.read_text(encoding='utf-8-sig') if args.html else None
         result = collect(home, fetcher, args.max_targets, html, args.output_dir)
@@ -251,7 +302,8 @@ def main():
             from render_homepage import render
             result['render'] = render(home, fetcher, args.selector, args.option_value, args.output_dir)
         result.update(created_at=datetime.now(timezone.utc).isoformat(), requests_used=fetcher.used,
-                      allocation_remaining=fetcher.remaining, config_path=str(args.config.resolve()))
+                      allocation_remaining=fetcher.remaining, config_path=str(args.config.resolve()),
+                      min_request_interval_seconds=fetcher.min_interval, rate_limit=fetcher.rate_limit)
         path = args.output_dir / 'homepage-evidence.json'
         path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
         print(path)

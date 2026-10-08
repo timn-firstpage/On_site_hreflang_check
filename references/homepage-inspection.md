@@ -24,6 +24,16 @@ python scripts/inspect_homepage.py --config path/to/global-config.json --remaini
 
 Output `homepage-evidence.json` includes source response, actual control attributes/labels, alternate targets, heuristic URL structures, target status/redirects, target lang/text samples, unchecked URLs and limitations. Full retrieved HTML is archived beside it, subject to a reported 2 MB response cap. A 200 response or html lang alone does not prove the expected version exists; review the content, supported by SF evidence where available. Non-HTML bodies, non-200 homepage results and truncation prevent absence claims. 403/429/network failures may reflect access limits rather than broken site controls.
 
+### Pacing and HTTP 429
+
+`budget.min_request_interval_seconds` defaults to 2 seconds between request starts, shared by static pages, redirects and programmatic browser resources within one invocation. This is a conservative default, not a guarantee against site-specific limits. Use an increased interval where needed; a total request budget alone is not rate limiting. Separate processes/SF sessions share neither this in-memory timer nor automatic coordination: the agent must avoid overlapping checks and carry rate-limit state in the integrated manifest.
+
+Any HTTP 429 stops all subsequent live requests in the invocation. The script does not retry or parse the 429 error page as homepage content. A static 429 also skips Playwright; a browser resource 429 stops subsequent resource requests and control checks. Output `rate_limit` records source URL, time, raw Retry-After, parsed wait and retry_not_before. Both integer seconds and HTTP-date headers are supported. Missing/invalid Retry-After yields a 60-second suggested minimum before a later controlled check, not proof access will recover. The run exits with evidence rather than sleeping through long cooldowns.
+
+Before another invocation, check the previous rate_limit record, respect the server's wait, and reuse existing evidence; do not immediately rerun with a new output directory, switch to rendering or rotate identities. Check whether other audits/SF runs use the same network source. The helper's pacing cannot control those external callers.
+
+For live homepage 429, Findings can say: “首页请求被限流（HTTP 429），本次未能检查语言切换。” Coverage: “首页内容未取得；本轮后续请求已停止。” If 15.1 cannot otherwise be determined, use Human check; complete 15.2 from known alternate URLs where possible. Avoid instructing a manual browser check by default: recommend reusing SF evidence or a later code check after access recovers. This does not change 15.3: if an actual supplied SF Non-200 filter contains a 429 URL, retain X under the user's six-filter rule and describe its response as rate limiting, not a permanently broken page.
+
 ## 3. Optional JavaScript through code
 
 If static evidence is insufficient, use Python Playwright in a host with browser execution support. This is an optional runtime, not a model computer-use capability. Install once on that host:
