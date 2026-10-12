@@ -38,6 +38,76 @@ class Opener:
 
 
 class HomepageTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        (ROOT / 'runs').mkdir(exist_ok=True)
+
+    def test_cooldown_survives_new_fetcher_and_expires(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / 'runs') as tmp:
+            first = Fetcher(['example.com'], 3, state_dir=Path(tmp))
+            first.record_429('https://example.com/', '120')
+            second = Fetcher(['example.com'], 3, state_dir=Path(tmp))
+            second.opener = Opener([])
+            self.assertEqual(second.fetch('https://example.com/')['error'], 'cooldown_active')
+            self.assertEqual(second.used, 0)
+            self.assertEqual(second.opener.calls, [])
+            self.assertEqual(render('https://example.com/', second, None, None, Path(tmp))['state'], 'skipped_during_cooldown')
+            with patch('inspect_homepage.datetime') as clock:
+                clock.now.return_value = datetime.now(timezone.utc) + timedelta(seconds=121)
+                clock.fromisoformat.side_effect = datetime.fromisoformat
+                third = Fetcher(['example.com'], 3, state_dir=Path(tmp))
+                self.assertIsNone(third.acquire('https://example.com/'))
+
+    def test_bad_state_stops_before_network(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / 'runs') as tmp:
+            f = Fetcher(['example.com'], 3, state_dir=Path(tmp))
+            f.state_path('example.com').write_text('{}')
+            with self.assertRaises(KeyError):
+                Fetcher(['example.com'], 3, state_dir=Path(tmp))
+
+    def test_render_failure_has_no_static_fallback(self):
+        from inspect_homepage import inspect
+        f = Fetcher(['example.com'], 3)
+        f.opener = Opener([])
+        with tempfile.TemporaryDirectory(dir=ROOT / 'runs') as tmp, patch('render_homepage.render', return_value={'state': 'unavailable'}):
+            result = inspect('https://example.com/', f, Path(tmp), use_render=True)
+            self.assertNotIn('homepage', result)
+            self.assertEqual(f.opener.calls, [])
+
+    def test_reuse_rejects_other_site_and_error_only_evidence(self):
+        from inspect_homepage import reuse_evidence
+        with tempfile.TemporaryDirectory(dir=ROOT / 'runs') as tmp:
+            path = Path(tmp) / 'prior.json'
+            for data in [{'homepage': {'url': 'https://other.example/'}}, {'homepage_response': {'status': 429}}]:
+                path.write_text(json.dumps(data))
+                with self.assertRaises(ValueError):
+                    reuse_evidence(path, 'https://example.com/')
+
+    def test_render_mode_does_not_static_fetch_homepage(self):
+        from inspect_homepage import inspect
+        f = Fetcher(['example.com'], 3)
+        f.opener = Opener([])
+        with tempfile.TemporaryDirectory(dir=ROOT / 'runs') as tmp, patch('render_homepage.render') as rendered:
+            (Path(tmp) / 'rendered-before.html').write_text('<a href="/zh/">中文</a>', encoding='utf-8')
+            rendered.return_value = {'state': 'rendered', 'before': {'url': 'https://example.com/'}, 'response_status': 200}
+            result = inspect('https://example.com/', f, Path(tmp), use_render=True)
+            self.assertEqual(f.opener.calls, [])
+            self.assertEqual(result['homepage_response']['source'], 'rendered_html')
+            self.assertEqual(result['unchecked_targets'], ['https://example.com/zh/'])
+
+    def test_reuse_evidence_is_offline_and_preserves_date(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / 'runs') as tmp:
+            tmp = Path(tmp)
+            config = tmp / 'config.json'
+            config.write_text(json.dumps({'site': {'start_url': 'https://example.com/'}, 'checks': {'live_checks': False}}))
+            evidence = tmp / 'prior.json'
+            evidence.write_text(json.dumps({'homepage': {'url': 'https://example.com/', 'controls': [], 'alternates': []}, 'created_at': '2026-10-01T00:00:00+00:00', 'requests_used': 9}))
+            run = subprocess.run([sys.executable, str(ROOT / 'scripts/inspect_homepage.py'), '--config', str(config), '--reuse-evidence', str(evidence), '--output-dir', str(tmp / 'out')], capture_output=True, text=True)
+            self.assertEqual(run.returncode, 0, run.stderr)
+            result = json.loads((tmp / 'out/homepage-evidence.json').read_text(encoding='utf-8'))
+            self.assertEqual(result['requests_used'], 0)
+            self.assertEqual(result['reused_created_at'], '2026-10-01T00:00:00+00:00')
+
     def test_nested_link_and_header_alternates(self):
         page = parse_page('<html lang="en"><a href="/zh/"><span>中文</span></a><link rel="alternate" hreflang="zh" href="/zh/"></html>', 'https://example.com/', '<https://example.com/en/>; rel="alternate"; hreflang="en"')
         self.assertEqual(page['controls'][0]['url'], 'https://example.com/zh/')

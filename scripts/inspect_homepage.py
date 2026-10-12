@@ -4,6 +4,7 @@ from datetime import datetime, timezone, timedelta
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 import json
+import hashlib
 import math
 from pathlib import Path
 import re
@@ -136,7 +137,7 @@ class NoRedirect(HTTPRedirectHandler):
 
 
 class Fetcher:
-    def __init__(self, hosts, budget, timeout=15, max_redirects=5, min_interval=2):
+    def __init__(self, hosts, budget, timeout=15, max_redirects=5, min_interval=2, state_dir=None):
         self.hosts = set(hosts)
         self.remaining = budget
         self.used = 0
@@ -147,12 +148,30 @@ class Fetcher:
             raise ValueError('min_request_interval_seconds must be finite and nonnegative')
         self.last_request_at = None
         self.rate_limit = None
+        self.state_dir = Path(state_dir) if state_dir is not None else None
+        self.cooldown = None
+        if self.state_dir:
+            self.state_dir.mkdir(parents=True, exist_ok=True)
+            for host in self.hosts:
+                path = self.state_path(host)
+                if path.exists():
+                    record = json.loads(path.read_text(encoding='utf-8'))
+                    until = datetime.fromisoformat(record['retry_not_before'])
+                    if until.tzinfo is None:
+                        raise ValueError('Cooldown timestamp must include timezone')
+                    if until > datetime.now(timezone.utc) and (self.cooldown is None or until > datetime.fromisoformat(self.cooldown['retry_not_before'])):
+                        self.cooldown = record
         self.opener = build_opener(NoRedirect())
+
+    def state_path(self, host):
+        return self.state_dir / (hashlib.sha256(host.lower().encode()).hexdigest() + '.json')
 
     def acquire(self, url):
         """Shared pacing and stop state for HTTP pages, redirects and browser resources."""
         if self.rate_limit:
             return 'stopped_after_429'
+        if self.cooldown and datetime.fromisoformat(self.cooldown['retry_not_before']) > datetime.now(timezone.utc):
+            return 'cooldown_active'
         if not self.permitted(url):
             return 'host_out_of_scope'
         if self.remaining <= 0:
@@ -189,6 +208,13 @@ class Fetcher:
                            'retry_not_before': not_before.isoformat(),
                            'suggested_wait_seconds': seconds,
                            'action': 'Stop this run. No automatic retry. Honor the server wait; if absent, the 60s suggestion is not a guarantee of recovery.'}
+        if self.state_dir:
+            # Apply to this allowed-host scope; locale hosts may share a site limit.
+            for host in self.hosts:
+                path = self.state_path(host)
+                temporary = path.with_suffix('.tmp')
+                temporary.write_text(json.dumps(self.rate_limit, ensure_ascii=False, indent=2), encoding='utf-8')
+                temporary.replace(path)
 
     def permitted(self, url):
         p = urlsplit(url)
@@ -260,11 +286,45 @@ def collect(home, fetcher, max_targets=6, html=None, archive=None):
     return result
 
 
+def inspect(home, fetcher, archive, max_targets=6, html=None, use_render=False, selector=None, option_value=None):
+    if not use_render:
+        return collect(home, fetcher, max_targets, html, archive)
+    # Render once instead of fetching the same homepage first via urllib.
+    from render_homepage import render
+    rendered = render(home, fetcher, selector, option_value, archive)
+    if rendered.get('state') == 'rendered' and rendered.get('response_status') == 200 and (archive / 'rendered-before.html').exists():
+        result = collect(rendered['before']['url'], fetcher, html=(archive / 'rendered-before.html').read_text(encoding='utf-8'), archive=archive)
+        result['homepage_response'].update(source='rendered_html', status=rendered.get('response_status'), requested_url=home)
+        result['limitations'].append('Render mode does not separately fetch alternate targets; use saved target evidence or a bounded follow-up only if needed.')
+    else:
+        result = {'homepage_response': {'url': home, 'source': 'render', 'status': 429 if fetcher.rate_limit else rendered.get('response_status')},
+                  'targets': [], 'limitations': ['Rendered homepage unavailable; switching is not verified. No automatic static fallback.']}
+    result['render'] = rendered
+    return result
+
+
+def reuse_evidence(path, home):
+    result = json.loads(path.read_text(encoding='utf-8-sig'))
+    if not isinstance(result, dict) or not isinstance(result.get('homepage'), dict):
+        raise ValueError('Reusable evidence must contain a successfully parsed homepage')
+    source = result['homepage'].get('url', '')
+    # Exact match, or an archived redirect from this configured homepage.
+    requested = result.get('homepage_response', {}).get('requested_url')
+    if source != home and requested != home:
+        raise ValueError('Saved evidence does not match site.start_url')
+    result['reused_created_at'] = result.get('reused_created_at', result.get('created_at'))
+    result['reused_evidence_path'] = str(path.resolve())
+    result.setdefault('limitations', []).append('Reused saved evidence; no fresh website or switch check was performed.')
+    return result
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--config', type=Path, required=True)
     ap.add_argument('--output-dir', type=Path, required=True)
     ap.add_argument('--html', type=Path, help='Saved homepage HTML; offline mode, no HTTP or rendering')
+    ap.add_argument('--reuse-evidence', type=Path, help='Reuse site-matched homepage-evidence.json without HTTP')
+    ap.add_argument('--state-dir', type=Path, help='Shared persistent 429 state; default: .hreflang-state beside config')
     ap.add_argument('--remaining-requests', type=int, default=0, help='Explicit allocation from remaining shared live budget')
     ap.add_argument('--max-targets', type=int, default=6)
     ap.add_argument('--render', action='store_true')
@@ -278,9 +338,12 @@ def main():
         home = config.get('site', {}).get('start_url')
         if not isinstance(home, str) or not web_url(home, home):
             raise ValueError('site.start_url must be an HTTP(S) URL')
-        if not args.html and not config.get('checks', {}).get('live_checks', True):
+        offline = bool(args.html or args.reuse_evidence)
+        if args.html and args.reuse_evidence:
+            raise ValueError('Choose --html or --reuse-evidence, not both')
+        if not offline and not config.get('checks', {}).get('live_checks', True):
             raise ValueError('Live checks disabled; supply --html for offline parsing')
-        if args.html and (args.render or args.selector):
+        if offline and (args.render or args.selector):
             raise ValueError('Offline mode cannot render or click')
         if args.selector and not args.render:
             raise ValueError('--selector requires --render')
@@ -290,24 +353,23 @@ def main():
         allocation = min(args.remaining_requests, budget.get('max_live_requests', 200))
         if allocation < 0 or args.max_targets < 0:
             raise ValueError('Request allocation and max-targets must be nonnegative')
-        if not args.html and allocation == 0:
+        if not offline and allocation == 0:
             raise ValueError('Live mode requires --remaining-requests from the shared remaining budget')
         hosts = config.get('site', {}).get('allowed_hosts') or [urlsplit(home).hostname]
         fetcher = Fetcher(hosts, allocation, budget.get('timeout_seconds', 15), budget.get('max_redirect_hops', 5),
-                          budget.get('min_request_interval_seconds', 2))
+                          budget.get('min_request_interval_seconds', 2),
+                          state_dir=None if offline else (args.state_dir or args.config.resolve().parent / '.hreflang-state'))
         args.output_dir.mkdir(parents=True, exist_ok=False)
         html = args.html.read_text(encoding='utf-8-sig') if args.html else None
-        result = collect(home, fetcher, args.max_targets, html, args.output_dir)
-        if args.render:
-            from render_homepage import render
-            result['render'] = render(home, fetcher, args.selector, args.option_value, args.output_dir)
+        result = reuse_evidence(args.reuse_evidence, home) if args.reuse_evidence else inspect(home, fetcher, args.output_dir, args.max_targets, html, args.render, args.selector, args.option_value)
         result.update(created_at=datetime.now(timezone.utc).isoformat(), requests_used=fetcher.used,
                       allocation_remaining=fetcher.remaining, config_path=str(args.config.resolve()),
-                      min_request_interval_seconds=fetcher.min_interval, rate_limit=fetcher.rate_limit)
+                      min_request_interval_seconds=fetcher.min_interval, rate_limit=fetcher.rate_limit if not offline else result.get('rate_limit'),
+                      cooldown=fetcher.cooldown, state_dir=str(fetcher.state_dir.resolve()) if fetcher.state_dir else None)
         path = args.output_dir / 'homepage-evidence.json'
         path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
         print(path)
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, KeyError, TypeError) as exc:
         ap.exit(1, f'Homepage inspection failed: {exc}\n')
 
 

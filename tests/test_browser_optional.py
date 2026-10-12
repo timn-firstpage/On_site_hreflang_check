@@ -6,10 +6,11 @@ import sys
 import tempfile
 from threading import Thread
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from inspect_homepage import Fetcher
+from inspect_homepage import Fetcher, inspect
 from render_homepage import render
 
 
@@ -55,7 +56,11 @@ class BrowserTests(unittest.TestCase):
         run_root.mkdir(exist_ok=True)
         with tempfile.TemporaryDirectory(dir=run_root) as tmp:
             f = Fetcher(['127.0.0.1'], 10, min_interval=0)
-            result = render(f'http://127.0.0.1:{self.server.server_port}/', f, '#language', 'zh', Path(tmp))
+            with patch.object(f, 'fetch', side_effect=AssertionError('Unexpected static homepage request')):
+                evidence = inspect(f'http://127.0.0.1:{self.server.server_port}/', f, Path(tmp), use_render=True, selector='#language', option_value='zh')
+            self.assertEqual(evidence['homepage_response']['source'], 'rendered_html')
+            self.assertEqual(evidence['homepage']['html_lang'], 'en')
+            result = evidence['render']
             self.assertEqual(result['state'], 'rendered', result)
             self.assertEqual(result['switch'], 'observed_change')
             self.assertFalse(result['url_changed'])

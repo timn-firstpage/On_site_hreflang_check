@@ -83,13 +83,20 @@ Findings 示例：「已发现英文和中文 hreflang；切换尚未验证。�
 # 离线解析已有首页 HTML，不访问网络
 python scripts/inspect_homepage.py --config path/to/global-config.json --html path/to/homepage.html --output-dir runs/home-offline-001
 
+# 复用同网站的取证 JSON，不访问网络，保留原取证日期
+python scripts/inspect_homepage.py --config path/to/global-config.json --reuse-evidence runs/previous/homepage-evidence.json --output-dir runs/home-reuse-001
+
 # 从共享剩余预算分配 12 次请求，最多检查 6 个候选地址
 python scripts/inspect_homepage.py --config path/to/global-config.json --remaining-requests 12 --max-targets 6 --output-dir runs/home-http-001
 ```
 
 输出 `homepage-evidence.json` 和 HTML 存档，包括入口、候选 URL、响应、内容及未验证部分。每次使用新目录，实际请求数计入共享预算。HTTP／离线解析使用 Python 标准库；纯 JS 控件可选安装 `requirements-browser.txt` 和 Chromium，使用 `--render`、已识别的 `--selector` 及 `--option-value`。
 
-默认请求间隔至少 2 秒，可用 `budget.min_request_interval_seconds` 调整。遇到 429 停止本轮后续请求，不自动重试或转用 Playwright。记录 `Retry-After`，后续运行先遵守等待时间；无有效等待头时建议至少等 60 秒再评估，不保证届时恢复。优先复用保存的证据。
+先检查现有 SF／HTML／取证 JSON，证据足够时不再访问网站。复用不代表重新验证，报告保留原取证日期与缺失部分。JSON 必须匹配网站且含已解析首页；只有 429 错误的 JSON 不能作为有效首页复用。`--render` 直接用程序化浏览器加载，不再先用 Python 请求一次首页，也不额外抓取候选地址；需要时用已有候选页面证据补充。
+
+默认请求间隔至少 2 秒，可用 `budget.min_request_interval_seconds` 调整。遇到 429 停止本轮后续请求，不自动重试。冷却记录默认保存到 config 旁的 `.hreflang-state/`；后续运行会读取它，冷却期间请求数为 0。config 目录只读或多份 config 共用一个网站时，用 `--state-dir path/to/shared-state` 指定同一个可写目录。离线复用仍可进行。
+
+按 `Retry-After` 等待；无有效等待头时建议至少等 60 秒再评估，不保证届时恢复。这是同一状态目录下顺序运行的保护，不是 SF／其他 audit 的统一限流器；避免同时检查同一个网站。
 
 429 报告写：「首页请求被限流，未检查语言切换。」下一步写：「请提供已保存的首页 HTML 或 SF 结果。」访问或运行环境限制不能直接判定网站切换坏了。详情见 [代码取证说明](references/homepage-inspection.md)。
 

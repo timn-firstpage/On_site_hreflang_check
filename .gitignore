@@ -4,3 +4,4 @@ __pycache__/
 .venv/
 .env
 config.local.json
+.hreflang-state/

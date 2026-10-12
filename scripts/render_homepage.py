@@ -7,6 +7,11 @@ def render(url, fetcher, selector, option_value, output_dir):
     if fetcher.rate_limit:
         result.update(state='skipped_after_429', rate_limit=fetcher.rate_limit)
         return result
+    if fetcher.cooldown:
+        from datetime import datetime, timezone
+        if datetime.fromisoformat(fetcher.cooldown['retry_not_before']) > datetime.now(timezone.utc):
+            result.update(state='skipped_during_cooldown', cooldown=fetcher.cooldown)
+            return result
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
