@@ -7,8 +7,8 @@
       "id": "15.1",
       "item_name": "Multi-language / country?",
       "result": "√",
-      "finding": "模拟案例：确认有中文及英文版本，首页切换正常。",
-      "coverage": "模拟首页观察，非真实网站审计。",
+      "finding": "模拟案例：中文和英文版本可正常切换。",
+      "instruction": "无需处理。",
       "evidence_state": "available",
       "evidence": ["synthetic fixture"],
       "issues": []
@@ -17,15 +17,15 @@
       "id": "15.2",
       "item_name": "Parameter? (i.e. ?lang=en) or ccTLD or others?",
       "result": "X",
-      "finding": "模拟案例：目前使用语言参数区分版本，按本 checklist 列为可优化项。",
-      "coverage": "模拟版本 URL：https://example.com/?lang=en",
+      "finding": "模拟案例：语言版本使用 ?lang=en 参数。",
+      "instruction": "可在改版时考虑语言子目录，并评估迁移影响。",
       "evidence_state": "available",
       "evidence": ["synthetic fixture"],
       "issues": [
         {
           "address": "https://example.com/",
           "issue": "语言版本使用参数：https://example.com/?lang=en",
-          "instruction": "可在后续网站规划时考虑采用语言子目录或子域名；建议结合现有收录情况与迁移成本评估。"
+          "instruction": "可在改版时考虑语言子目录，并评估迁移影响。"
         }
       ]
     },
@@ -33,10 +33,10 @@
       "id": "15.3",
       "item_name": "Are there any hreflang issues?",
       "result": "√",
-      "finding": "模拟案例：本次初审暂未发现问题。",
-      "coverage": "未取得 SF 结果；未验证六项 filters。",
+      "finding": "模拟案例：按初审约定暂记 √。",
+      "instruction": "请补充六项 SF 导出。",
       "evidence_state": "unavailable",
-      "missing_evidence_note": "尚未取得此项 SF 结果，建议补充后确认。",
+      "missing_evidence_note": "尚未取得六项 SF 结果，未完成验证。",
       "evidence": [],
       "issues": []
     }

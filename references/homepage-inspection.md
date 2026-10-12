@@ -32,7 +32,7 @@ Any HTTP 429 stops all subsequent live requests in the invocation. The script do
 
 Before another invocation, check the previous rate_limit record, respect the server's wait, and reuse existing evidence; do not immediately rerun with a new output directory, switch to rendering or rotate identities. Check whether other audits/SF runs use the same network source. The helper's pacing cannot control those external callers.
 
-For live homepage 429, Findings can say: “首页请求被限流（HTTP 429），本次未能检查语言切换。” Coverage: “首页内容未取得；本轮后续请求已停止。” If 15.1 cannot otherwise be determined, use Human check; complete 15.2 from known alternate URLs where possible. Avoid instructing a manual browser check by default: recommend reusing SF evidence or a later code check after access recovers. This does not change 15.3: if an actual supplied SF Non-200 filter contains a 429 URL, retain X under the user's six-filter rule and describe its response as rate limiting, not a permanently broken page.
+For live homepage 429, Findings: “首页请求被限流（HTTP 429），未检查语言切换。” Instruction: “请提供已保存的首页 HTML 或 SF 结果。” Record request/scope details in the manifest, not a Coverage column. If 15.1 cannot otherwise be determined, use Human check; complete 15.2 from known alternate URLs where possible. Avoid instructing a manual browser check by default: reuse SF evidence or perform a later code check after access recovers. This does not change 15.3: if an actual supplied SF Non-200 filter contains a 429 URL, retain X under the user's six-filter rule and describe its response as rate limiting, not a permanently broken page.
 
 ## 3. Optional JavaScript through code
 

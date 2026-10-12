@@ -2,145 +2,148 @@
 
 <p align="center"><img src="assets/onsite-audit-cover.png" alt="Onsite Audit 系列封面：网站检查、放大镜和审计报告" width="640"></p>
 
-用于 onsite audit **15. HREFLANG** 的 Codex skill。复用现有 [SF Shared Config](https://github.com/timn-firstpage/On-_site_SF_shared_config)，检查多语言切换、URL 结构及 SF hreflang 结果，输出固定格式 Excel。
+用于 onsite audit **15. HREFLANG** 的 Codex skill。复用 [SF Shared Config](https://github.com/timn-firstpage/On-_site_SF_shared_config)，检查语言切换、版本 URL 结构和 SF hreflang 结果，生成 Excel。
 
-Skill 名称：`onsite-audit-hreflang`。入口：[SKILL.md](SKILL.md)。本包由 agent 负责取证和判断，Python 生成器负责校验与排版；不是独立网站爬虫，也不直接解析 SF 二进制数据库。
-
-**15.1／15.2 使用代码取证，不需要模型具备 computer use 能力。** Python 标准库读取 HTML、语言入口、hreflang 和候选地址；纯 JS 控件可选用 Playwright 脚本测试。各模型使用同一套脚本与 JSON 证据。模型仍需能运行代码，或由外部执行器返回结果。
+Skill 名称：`onsite-audit-hreflang`。入口：[SKILL.md](SKILL.md)。Agent 负责取证和判断，Python 负责校验与报告输出。
 
 ## 安装与使用
 
-把本仓库根目录复制或链接为 Codex skills 目录下的 `onsite-audit-hreflang`，然后刷新技能列表。SF 新 crawl 准备依赖另行安装的 `sf-shared-config`；已有适用 crawl/exports 可直接复用。仓库 clone 本身不代表 skill 已安装。
+将仓库复制或链接为 Codex skills 目录下的 `onsite-audit-hreflang`，刷新技能列表。已有 SF crawl／exports 可直接复用；新 crawl 准备由另行安装的 `sf-shared-config` 负责。Clone 仓库不等于安装 skill。
 
-在实际执行机器使用 Python 3.9+，安装一次报告依赖：
+实际执行机器需要 Python 3.9+，安装报告依赖：
 
 ```text
 python -m pip install -r requirements.txt
 ```
 
-使用示例：
+示例：
 
 > 使用 $onsite-audit-hreflang，检查 https://example.com，公司名 Example。沿用我的 onsite global config 和已保存的 .seospider，输出 hreflang 初审 Excel。
 
-提供网站、公司名、global config 路径及 crawl/导出位置。日期默认按用户时区当天填写。无 global config 时可复制 [config.template.json](config.template.json) 到独立 run 目录填写。模板中的 MCP 名称是待发现的提示，不代表已建立连接。
+提供网站、公司名、global config 和 crawl／导出路径。日期按用户时区填写。无 global config 时可复制 [config.template.json](config.template.json) 到独立 run 目录使用。模板不会自动连接 MCP 或启动 crawl。
 
 ## 检查逻辑
 
-### 先用代码取证
+### 15.1 Multi-language / country?
 
-优先使用已有 HTML／SF 导出；允许 live checks 时，检查首页及少量语言版本地址。**15.2 直接依据已找到的真实版本 URL 判断，不要求先点击成功，也不要求首页 URL 改变。**
+检查是否有**多语言或多地区版本**，并检查首页能否切换。
+
+- `en` 和 `zh` 是英文、中文的多语言线索，不代表多个国家。
+- 真实英文和中文版本符合“多语言”，不要求同时具备多个国家版本。
+- `en-HK` 和 `en-SG` 可以表示同一语言面向不同地区。
+- hreflang 标签声明了版本，但不能单凭标签确认目标内容或首页切换正常。结合实际内容或已有 SF 证据判断。
+
+| Check Result | 何时使用 |
+| --- | --- |
+| √ | 确认有多个语言／地区版本，且首页切换正常。 |
+| X | 确认有多个版本，但首页无可用入口或切换失败。 |
+| N/A | 确认只有单语言、单地区版本。 |
+| Human check | 版本内容或切换行为尚未确认。 |
+
+Findings 示例：「已发现英文和中文 hreflang；切换尚未验证。」Instruction 示例：「请确认首页语言切换正常。」不能把“找到标签”写成“已验证多国家及切换正常”。
+
+### 15.2 URL structure
+
+使用真实版本 URL 判断结构，**不要求先点击成功，也不要求首页 URL 改变**。
+
+| Check Result | 何时使用 |
+| --- | --- |
+| √ | ccTLD、语言／地区子目录或子域名，例如 example.de、example.com/en/、en.example.com。默认语言根目录也可以。 |
+| X | 用 ?lang=en 等参数区分版本；混合结构中发现这种形式也列为优化项。普通 tracking 参数不计入。 |
+| N/A | 15.1 已确认单语言、单地区。切换失败不会让此项自动 N/A。 |
+| Human check | 版本 URL 尚未确认，或只用同一 URL 的 cookie／JS 切换。 |
+
+参数 URL 按本 checklist 温和提醒：Findings 写「语言版本使用 ?lang=en 参数」；Instruction 写「可在改版时考虑语言子目录，并评估迁移影响」。
+
+### 15.3 Hreflang issues
+
+读取六项 SF filters：**Missing、Missing Return Links、Missing Self Reference、Non-Canonical Return Links、Incorrect Language & Region Codes、Non-200 Hreflang URLs**。
+
+按以下顺序判断：
+
+| 情况 | Check Result | Findings 示例 | Instruction 示例 | 进入问题页 |
+| --- | --- | --- | --- | --- |
+| 用户明确跳过 15.3 | N/A | 用户指定本次不检查。 | 无需处理。 | X |
+| 任一 filter 有问题 URL，包括 Missing | X | 发现 3 个缺少 hreflang 的页面。 | 请按问题页修正。 | √ |
+| 六项已取得，均没有问题 URL | √ | 六项 SF 结果未发现问题。 | 无需处理。 | X |
+| 只取得部分结果，已取得的部分没有问题 | √ | 已取得结果未发现问题；其余五项未验证。 | 请补充其余五项 SF 导出。 | X |
+| 六项结果均未取得／读取失败 | √ | 尚未取得 SF 结果，按初审约定暂记 √，未完成验证。 | 请补充六项 SF 导出。 | X |
+
+**Missing 中有 URL 是问题，记 X；缺少导出是未取得结果，按初审约定记 √ 并提醒。** 空结果包括 0 条、空表、空白、null、none 或 NaN；不能覆盖其他实际问题 URL。
+
+例如：Missing 有 3 个 URL，其他五项没有拿到 → X，并列出这 3 个问题。Missing 为 0 条，其他五项没有拿到 → √，Findings 说明未验证，Instruction 请求补充导出。
+
+不额外要求 Crawl Analysis 完成证明才接受空结果。15.1 单语言 N/A 不自动跳过 15.3。未取得结果时的 √ 不能写成“全站已验证正常”。详细边界见 [审计规则](references/audit-rules.md)。
+
+## 代码取证与 HTTP 429
+
+15.1／15.2 使用代码，不需要 computer use。各模型运行同一套 Python 脚本并读取 JSON；没有代码执行能力时，需要外部执行器。
 
 ```text
-# 离线解析保存的首页，不访问网络
+# 离线解析已有首页 HTML，不访问网络
 python scripts/inspect_homepage.py --config path/to/global-config.json --html path/to/homepage.html --output-dir runs/home-offline-001
 
-# 从 global config 的剩余预算分配 12 次请求，最多检查 6 个候选地址
+# 从共享剩余预算分配 12 次请求，最多检查 6 个候选地址
 python scripts/inspect_homepage.py --config path/to/global-config.json --remaining-requests 12 --max-targets 6 --output-dir runs/home-http-001
 ```
 
-脚本输出 `homepage-evidence.json` 和 HTML 存档，包含入口文字与地址、hreflang、响应状态、最终 URL、内容摘要及未检查部分。每次使用新的输出目录，并把实际请求数计入共享预算。
+输出 `homepage-evidence.json` 和 HTML 存档，包括入口、候选 URL、响应、内容及未验证部分。每次使用新目录，实际请求数计入共享预算。HTTP／离线解析使用 Python 标准库；纯 JS 控件可选安装 `requirements-browser.txt` 和 Chromium，使用 `--render`、已识别的 `--selector` 及 `--option-value`。
 
-**请求限速：**默认每次请求至少间隔 2 秒，HTTP 页面、重定向和 Playwright 资源共用间隔；可通过 global config 的 `budget.min_request_interval_seconds` 调整。这个设置不改变 SF 或其他程序的请求速度，也不能保证所有网站都接受该速率。
+默认请求间隔至少 2 秒，可用 `budget.min_request_interval_seconds` 调整。遇到 429 停止本轮后续请求，不自动重试或转用 Playwright。记录 `Retry-After`，后续运行先遵守等待时间；无有效等待头时建议至少等 60 秒再评估，不保证届时恢复。优先复用保存的证据。
 
-**遇到 HTTP 429：**立即停止本轮后续请求，不自动重试，也不转用 Playwright 继续访问。JSON 记录返回 429 的 URL、`Retry-After` 和最早可再次尝试的时间；后续运行应先遵守等待时间并复用已有证据。没有有效 `Retry-After` 时建议至少等 60 秒再评估，并不保证届时恢复。不要同时启动多个 audit 持续访问同一网站。
-
-报告用语示例：「首页请求被限流（HTTP 429），本次未能检查语言切换。」这表示检查受到访问限制，不证明网站切换功能坏了。已有版本 URL 仍可用于 15.2；实际 SF 六项问题结果仍按 15.3 的约定判定。
-
-需要执行 JS 时，可选安装 `requirements-browser.txt` 与 Chromium，再加 `--render`；根据实际页面中的语言选择器，可用 `--selector` 和 `--option-value` 测试一个控件。全部由代码执行，不调用 computer-use 工具。完整安装、命令和边界见 [代码取证说明](references/homepage-inspection.md)。
-
-如果没有浏览器运行组件，仍先完成静态取证和能够确定的 URL 结构检查。只有 JS 行为确实无法确认时才说明这一项的具体缺口；不得把「运行环境无法测试」写成「网站切换失败」。脚本观察到变化也不自动判通过，需确认变化确实对应目标语言／地区。
-
-### 判定规则
-
-| Item | 判定 |
-| --- | --- |
-| **15.1 Multi-language / country?** | **检查什么：**查看首页渲染后的 header、footer、菜单和语言／地区选择器，结合实际版本 URL、目标页面及已有 hreflang 记录，确认是否有多个语言或地区版本，并检查首页切换是否可用。同一语言的不同地区版本也算，例如 en-HK 与 en-SG。<br><br>**√：**已确认存在多个版本，且检查到的首页切换入口能正常到达对应版本。<br>**X：**已确认存在多个版本，但首页没有可用切换入口，或实际操作发现切换失败；将首页地址、缺失入口／失败行为及修正建议放入问题页。<br>**N/A：**已确认网站只有单语言、单地区版本。<br>**Human check：**无法确认是否有多个版本，或无法检查切换行为。仅首页没看到按钮、HTML lang、JS 中出现语言字样或单个自引用 hreflang，都不足以直接确认多语言或单语言。<br><br>**报告记录：**Findings 写已发现的版本及切换结果；Coverage 写实际检查的页面、入口、目标 URL 和未验证部分。 |
-| **15.2 URL structure** | **检查什么：**使用实际语言／地区版本 URL 判断结构；不只看主域名，也不把普通 tracking 参数当成语言参数。<br><br>**√：**采用 ccTLD（example.de、example.com.hk）、语言／地区子目录（example.com/en/）或子域名（en.example.com）；默认语言直接使用根目录也可以。<br>**X：**确认使用 ?lang=en 等参数区分语言／地区版本；混合结构中发现这种形式也按本 checklist 列为优化项。<br>**N/A：**15.1 已确认单语言、单地区。15.1 因切换问题记 X 时，仍继续检查此项。<br>**Human check：**版本 URL 或结构尚不能确认；只靠同一 URL 的 cookie／JS 切换时，提示人工评估独立版本 URL。<br><br>**报告记录：**Findings 写实际结构及代表 URL，Coverage 写已检查哪些版本。参数形式的 Finding 使用「目前使用语言参数区分版本，按本 checklist 列为可优化项」；Instruction 使用「可在后续网站规划时考虑语言子目录或子域名，结合现有收录情况与迁移成本评估」，保持温和建议语气。 |
-| **15.3 Hreflang issues** | **检查什么：**读取现有 SF crawl 的六项结果：Missing、Missing Return Links、Missing Self Reference、Non-Canonical Return Links、Incorrect Language & Region Codes、Non-200 Hreflang URLs。<br><br>**N/A：**用户明确说本次不检查 15.3，优先按跳过处理；15.1 单语言 N/A 不会自动跳过此项。<br>**X：**未跳过时，任意一个 filter 有至少一个实际问题 URL 就 raise，包括 Missing；即使其他 filters 为空或未取得，仍记 X。所有已取得的问题记录进入问题页，列出 source Address、问题类型、已知 target URL 及处理建议。<br>**√（结果为空）：**六项均已取得且没有问题 URL，包括 0 条、空表、空白、null、none 或 NaN。Findings 写「已读取的六项 SF 结果均未发现问题 URL」；Coverage 写真实数据来源、crawl 日期及覆盖范围。<br>**√（部分／全部结果未取得）：**在没有任何已知问题 URL 的前提下，按约定暂记初审 √。Findings 必须提醒「尚未取得〔具体 filters／全部 SF 结果〕，建议补充后确认」；Coverage 标明「部分未验证」或「未取得结果，未验证」。不能写成全站已验证正常。<br><br>**注意：**Missing filter 中的 URL 是已发现的问题，记 X；缺少导出文件或读取失败是未取得结果，按上述初审规则处理。空值不能覆盖其他有效问题 URL。下表给出判断顺序和完整写法。 |
-
-六个 filters：Missing、Missing Return Links、Missing Self Reference、Non-Canonical Return Links、Incorrect Language & Region Codes、Non-200 Hreflang URLs。SF Missing 有记录直接 raise，不再逐页判断是否需要其他语言版本。单语言本身不自动跳过 15.3；用户可以明确排除。
-
-参数 URL 是此 checklist 的优化项，不等于 hreflang 必然无效，不建议直接要求网站迁移。仅 HTML lang 或单个自引用不能证明多语言。规则和措辞详见 [audit-rules.md](references/audit-rules.md)。
-
-### 15.3 具体怎样打勾或报问题？
-
-按以下顺序判断，命中后即确定结果：
-
-| 顺序 | 实际情况 | Check Result | Findings / Coverage 怎么写 | 进入问题页？ |
-| --- | --- | --- | --- | --- |
-| 1 | 用户明确说本次不用检查 15.3 | N/A | Findings 写「用户指定本次不检查 hreflang」；Coverage 写「本次未执行」。 | 否 |
-| 2 | 六项中任意一项出现至少一个实际问题 URL，包括 Missing；即使其他项为空或未取得 | X | Findings 写问题类型和实际数量；Coverage 列出已读取及缺失的 filters、来源与范围。 | 是，列出所有已取得的问题记录 |
-| 3 | 六项结果都已取得，均没有问题 URL：0 条、空表、空白、null、none 或 NaN | √ | Findings 写「已读取的六项 SF 结果均未发现问题 URL」；Coverage 写实际来源、crawl 日期和覆盖范围。 | 否 |
-| 4 | 只取得部分结果，已取得的部分没有问题 URL | √ | Findings 写「已取得的结果暂未发现问题；尚缺少〔具体 filters〕，建议补充后确认」；Coverage 写「部分结果未取得，未完成完整验证」。 | 否 |
-| 5 | 六项结果全部未取得，例如没有导出、无法打开或读取失败 | √ | Findings 写「按本次初审约定暂记 √；尚未取得 SF hreflang 结果，建议补充后确认」；Coverage 写「未取得结果，未验证」。 | 否 |
-
-**「Missing filter 有 URL」与「缺少 SF 导出结果」是两回事。** 前者代表 SF 已列出问题，记 X；后者按你的 first-check 约定记 √，同时必须提醒。空白/NaN 只表示没有有效问题记录，不能覆盖同一份结果里其他真实 URL。
-
-例如：Missing 有 3 个 URL，其他五项没有拿到 → **X**，这 3 个 URL 进入问题页，Coverage 同时说明其他五项未取得。只有 Missing 已取得且为 0 条，其他五项没有拿到 → **√**，但必须说明这是部分结果的初审。
-
-**缺少结果时的 √ 仅表示按约定暂未报出问题。** 不得写成「已验证全部正常」或「全站 hreflang 无问题」。即使六项为空，也只描述所提供 crawl 的实际范围；不额外要求 Crawl Analysis 完成证明才接受空结果。
+429 报告写：「首页请求被限流，未检查语言切换。」下一步写：「请提供已保存的首页 HTML 或 SF 结果。」访问或运行环境限制不能直接判定网站切换坏了。详情见 [代码取证说明](references/homepage-inspection.md)。
 
 ## Global config 与 saved crawl
 
-共用 `site/source/mcp/budget/cache/output`，只执行 `checks.hreflang`。配置由 agent 解释，读取 JSON 不会启动 SF。相对路径按 config 所在目录解析；累计预算和 handover 与其他 onsite audits 共用。详见 [shared-config.md](references/shared-config.md)。
+共用 `site/source/mcp/budget/cache/output`，只执行 `checks.hreflang`。配置中的相对路径按 config 目录解析；显式 CLI 路径按当前目录解析。复用累计预算及 handover，不复制 SF profiles。
 
-已有 `.seospider` 使用 `source.mode=saved_crawl` 和 `source.crawl_file`；优先复用匹配的完整 exports，否则通过 SF 支持的功能打开一次。没有 reader 时请用户打开保存文件并导出指定结果，不重新 Load config 或 Start。保护当前未保存的 SF session。
+已有 `.seospider` 使用 `source.mode=saved_crawl`、`source.crawl_file`。优先读取匹配 exports，必要时通过 SF 支持的功能打开一次；无 reader 时请用户打开已有文件并导出指定结果，保护当前未保存的 session。
 
-确需新 crawl 且允许时交给 shared skill：共用 profile、确认网站/sitemap、用户手动开始并保存。`allow_new_crawl=false` 不阻止读取已有结果；`live_checks=false` 禁止新的网页访问，依靠已有证据。浏览器操作和跨域覆盖以实际可用能力为准。
+确需新 crawl 且允许时交给 shared skill：用户确认网站／sitemap、手动开始并保存。`allow_new_crawl=false` 不阻止读取已有结果；`live_checks=false` 禁止新的网页访问。详见 [共享配置合约](references/shared-config.md)。
 
 ## Excel 输出
 
-文件名：`{name}_onsite_hreflang_audit_{date}.xlsx`。`name` 为公司／网站名称，`date` 为 `YYYY-MM-DD`。例如：`Example_onsite_hreflang_audit_2026-10-12.xlsx`。
+文件名：`{name}_onsite_hreflang_audit_{date}.xlsx`，date 为 YYYY-MM-DD。例如 `Example_onsite_hreflang_audit_2026-10-12.xlsx`。
 
 | Worksheet | 创建条件 | 列 |
 | --- | --- | --- |
-| Checklist | 始终，含 15.1–15.3 | Item No. / Item Name / Check Result / Findings / Coverage |
+| Checklist | 始终，含 15.1–15.3 | Item No. / Item Name / Check Result / Findings / Instruction |
 | 15. HREFLANG | 至少一个 X | Address / Issue / Instruction |
 
-所有 X 都有问题详情；一条 source/issue/target 一行，target 放 Issue。Human check 和 N/A 不进入问题页。无 X 时只输出 Checklist。保留冻结表头、自动筛选、换行及结果颜色，客户文本以 literal text 保存。
+**没有 Coverage 列。Findings 写发现，Instruction 写人需要做的下一步。** √／X 表示通过／问题，不使用 Yes／No；保留 N/A 和 Human check。所有 X 都进入问题页，一条 source／issue／target 一行。无 X 时只有 Checklist。
 
-### 报告用语：easy to read
+措辞要清晰、简短，特别是 Instruction：通常一条短句，一个具体动作。正常且无需处理时写「无需处理」。完整来源、范围和日期放证据存档；影响结论的缺失资料在 Findings 简短说明。
 
-Findings、Issue、Instruction、Coverage 和缺失资料提醒都要让非技术读者容易理解。先说发现了什么，再给具体下一步；尽量用一两句短句，不堆叠术语。必要时保留 SF filter 名称，并用通俗语言解释意思。每行写一个具体问题，保留真实 URL、数量和未检查范围。
+| Findings | Instruction |
+| --- | --- |
+| 中文和英文版本可正常切换。 | 无需处理。 |
+| 英文页面缺少指回中文页面的 hreflang 链接。 | 请添加指向对应中文页面的 hreflang 链接。 |
+| 尚未取得六项 SF 结果，未完成验证。 | 请补充六项 SF 导出。 |
+| 语言版本使用 ?lang=en 参数。 | 可在改版时考虑语言子目录，并评估迁移影响。 |
 
-| 字段 | 写什么 | 推荐写法示例 |
-| --- | --- | --- |
-| Findings | 简短说明检查结果 | 网站有中文和英文版本，首页可正常切换。 |
-| Issue | 具体问题，必要时附目标 URL | 英文页面没有 hreflang 链接指回中文页面（Missing Return Links）。目标页面：〔实际 URL〕。 |
-| Instruction | 明确、可执行的下一步 | 请在英文页面添加指向对应中文页面的 hreflang 链接。 |
-| Coverage | 实际检查范围及缺口 | 已读取 Missing，未发现问题。其余五项尚未取得。 |
-| 缺失资料提醒 | 说明暂记结果和待确认内容 | 尚未取得 SF 结果，本次先记 √。请补充结果后确认。 |
-
-语言参数问题保持温和：Finding 可写「语言版本使用 ?lang=en 区分，列为可优化项」；Instruction 可写「可在后续改版时考虑语言子目录或子域名，并评估收录影响和调整成本」。避免只写「优化 hreflang」等笼统建议，也不要为简短而省略未验证提醒。
-
-Agent 先按 [output-contract.md](references/output-contract.md) 写 findings.json，运行：
+Agent 按 [输出合约](references/output-contract.md) 写 findings.json，每项都包含 `finding` 和 `instruction`；无需 `coverage`。旧 JSON 需补充 instruction，并将下一步从 finding 中分离。
 
 ```text
 python scripts/build_report.py --input path/to/findings.json --output-dir path/to/unique-run
 ```
 
-生成器检查三项齐全、状态和问题对应关系、缺失证据提醒、写后内容一致性，并拒绝覆盖。错误时保留 findings/原始证据，修正后只重跑报告生成。长行超出可显示高度会报错，需拆分问题行或精简结论，完整原始证据留在 archive。
+生成器校验三项齐全、状态、下一步及 X 问题详情；文字按 literal text 保存，写后重新校验并拒绝覆盖。错误时保留证据，修正后只重跑输出。长行超出可显示高度时需精简结论或拆分问题行，完整原始数据留在 archive。
 
-## 如何测试
-
-先运行模拟案例（无网络、非真实审计）：
+## 测试与团队运行
 
 ```text
 python -m unittest discover -s tests -v
 python scripts/build_report.py --input examples/findings.json --output-dir runs/demo-001
 ```
 
-示例包含正常切换、参数 URL 优化项和未取得 SF 结果，预期两张表，问题页只有 15.2。再次运行需换 run 目录。测试覆盖无 X 只有一页、所有 X 进入详情、缺失结果提醒、N/A、非法输入、公式样式文本按文字保存及防覆盖。
+模拟案例包含正常切换、参数 URL 和缺少 SF 结果，预期两张表，问题页只有 15.2。测试覆盖表头与下一步、缺失结果提醒、X 筛选、文字安全、防覆盖、HTML 解析、预算与 429；可选浏览器测试需要 Playwright／Chromium。
 
-首页脚本测试包含：嵌套语言链接、HTML／HTTP header hreflang、下拉选项、字面量 JS 跳转地址、独立 URL 结构判断、禁止联网模式、请求预算和跨域重定向限制。浏览器组件缺失不影响这些基础测试；可选 JS 路线需在安装 Playwright／Chromium 的环境另行验收。
+真实验收仍需网站与 SF 数据，对照六项 filters、代表 URL 和切换行为，检查 Excel 排版。模拟数据不证明真实网站检查通过。
 
-真实验收：提供一个正常网站和一个已知异常网站的保存 crawl/exports，人工对照六个 filters 的实际问题数量与代表 URL，再核对代码记录的首页切换、报告全部问题行和两页排版。模拟测试不证明真实 SF/MCP 接入或 SEO 结论正确。
+- `SKILL.md`、`references/`：流程、规则及输出合约。
+- `scripts/build_report.py`：报告生成器。
+- `scripts/inspect_homepage.py`、`scripts/render_homepage.py`：基础与可选 JS 取证。
+- `examples/findings.json`：模拟数据。
+- `runs/`：忽略的报告、完整导出和 manifest；不提交客户数据或凭据。
 
-## 文件与团队运行
-
-- `SKILL.md`：执行入口；`references/`：判定、输出与 shared config 合约。
-- `scripts/build_report.py`：固定报告生成器；`examples/findings.json`：明确标注的模拟数据。
-- `scripts/inspect_homepage.py`：零额外依赖的 HTML／HTTP 取证；`scripts/render_homepage.py`：可选 Playwright 运行组件。
-- `runs/`：忽略的本地报告、完整导出、manifest 和 findings；不提交客户数据或凭据。
-
-同事在各自执行机器安装 skill 和 Python 依赖，并提供该机器可访问的 SF 文件和可写输出目录。GitHub 导入不会自动提供 SF 权限、运行环境或客户数据。执行 audit 不会自动修改网站或发布仓库内容。
+同事在实际执行机器准备 skill、Python 依赖、可读的 SF 文件及可写目录。GitHub 导入不会自动提供 SF 权限、网络或运行环境；执行 audit 不自动修改网站或发布仓库内容。

@@ -15,6 +15,24 @@ def sample():
 
 
 class ReportTests(unittest.TestCase):
+    def test_checklist_separates_instruction_without_coverage(self):
+        data = sample()
+        for c in data['checks']:
+            c.pop('coverage', None)
+            c['instruction'] = '请补充 SF 导出。' if c['id'] == '15.3' else '无需处理。'
+        rows = report_rows(data)['Checklist']
+        self.assertEqual(rows[0], ['Item No.', 'Item Name', 'Check Result', 'Findings', 'Instruction'])
+        self.assertEqual(rows[3][4], '请补充 SF 导出。')
+        self.assertNotIn('请补充 SF 导出。', rows[3][3])
+
+    def test_checklist_requires_human_next_step(self):
+        data = sample()
+        for c in data['checks']:
+            c['instruction'] = '无需处理。'
+        data['checks'][1]['instruction'] = ''
+        with self.assertRaises(ValueError):
+            validate(data)
+
     def test_all_pass_has_no_issue_sheet(self):
         data = sample()
         for c in data['checks']:
@@ -32,7 +50,8 @@ class ReportTests(unittest.TestCase):
         data = sample()
         row = report_rows(data)['Checklist'][3]
         self.assertIn('尚未取得', row[3])
-        self.assertIn('Not fully verified', row[4])
+        self.assertIn('未完成验证', row[3])
+        self.assertEqual(row[4], '请补充六项 SF 导出。')
         del data['checks'][2]['missing_evidence_note']
         with self.assertRaises(ValueError):
             validate(data)
@@ -41,6 +60,8 @@ class ReportTests(unittest.TestCase):
         for mutate in [lambda d: d['checks'][1].update(issues=[]),
                        lambda d: d['checks'][0].update(id='15.2'),
                        lambda d: d['checks'][0].update(result='Y'),
+                       lambda d: d['checks'][0].update(result='Yes'),
+                       lambda d: d['checks'][0].update(result='No'),
                        lambda d: d['checks'][0].update(evidence_state='unavailable')]:
             data = sample()
             mutate(data)
@@ -64,6 +85,8 @@ class ReportTests(unittest.TestCase):
             wb = load_workbook(path)
             self.assertEqual(wb['Checklist']['D2'].value, data['checks'][0]['finding'])
             self.assertEqual(wb['Checklist']['D2'].data_type, 's')
+            self.assertEqual(wb['Checklist']['E1'].value, 'Instruction')
+            self.assertEqual(wb['Checklist']['E2'].value, '无需处理。')
             self.assertEqual(wb.sheetnames, ['Checklist', '15. HREFLANG'])
             wb.close()
             with self.assertRaises(FileExistsError):

@@ -8,7 +8,7 @@ import re
 import unicodedata
 
 IDS = ['15.1', '15.2', '15.3']
-CHECK_HEADERS = ['Item No.', 'Item Name', 'Check Result', 'Findings', 'Coverage']
+CHECK_HEADERS = ['Item No.', 'Item Name', 'Check Result', 'Findings', 'Instruction']
 ISSUE_HEADERS = ['Address', 'Issue', 'Instruction']
 STATES = {'available', 'partial', 'unavailable', 'not_applicable'}
 
@@ -36,7 +36,7 @@ def validate(data):
     if sorted(str(c.get('id')) for c in checks) != IDS:
         raise ValueError('15.1, 15.2 and 15.3 must appear exactly once')
     for c in checks:
-        for key in ('item_name', 'finding', 'coverage', 'result', 'evidence_state'):
+        for key in ('item_name', 'finding', 'instruction', 'result', 'evidence_state'):
             require_text(c.get(key), f"{c['id']}.{key}")
         if c['result'] not in {'√', 'X', 'N/A', 'Human check'} or c['evidence_state'] not in STATES:
             raise ValueError('Unknown result or evidence_state')
@@ -67,11 +67,10 @@ def report_rows(data):
     validate(data)
     rows = {'Checklist': [CHECK_HEADERS]}
     for c in sorted(data['checks'], key=lambda c: c['id']):
-        finding, coverage = c['finding'], c['coverage']
+        finding = c['finding']
         if c['id'] == '15.3' and c['result'] == '√' and c['evidence_state'] != 'available':
             finding += '\n' + c['missing_evidence_note']
-            coverage += '\n未完成完整验证 / Not fully verified (first-check policy).'
-        rows['Checklist'].append([c['id'], c['item_name'], c['result'], finding, coverage])
+        rows['Checklist'].append([c['id'], c['item_name'], c['result'], finding, c['instruction']])
         for issue in c['issues']:
             rows.setdefault('15. HREFLANG', [ISSUE_HEADERS]).append([
                 issue['address'], c['id'] + ' — ' + issue['issue'], issue['instruction']])
@@ -94,7 +93,7 @@ def build_report(data, output_dir):
     wb.remove(wb.active)
     for title, table in rows.items():
         ws = wb.create_sheet(title)
-        widths = [12, 47, 19, 70, 65] if title == 'Checklist' else [55, 75, 75]
+        widths = [12, 47, 19, 65, 50] if title == 'Checklist' else [55, 65, 55]
         ws.freeze_panes = 'A2'
         ws.sheet_view.showGridLines = False
         for i, width in enumerate(widths, 1):
