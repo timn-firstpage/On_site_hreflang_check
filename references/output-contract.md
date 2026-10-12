@@ -1,6 +1,6 @@
 # Report and findings contract
 
-Filename: `Onsite_hreflang_{site_name}_{audit_date}.xlsx`, date YYYY-MM-DD. Invalid filename characters are sanitized; excessively long names are rejected. A unique writable run directory prevents overwriting prior reports.
+Filename: `{name}_onsite_hreflang_audit_{date}.xlsx`. Map name to findings.site_name and date to findings.audit_date (YYYY-MM-DD). Invalid filename characters are sanitized; excessively long names are rejected. A unique writable run directory prevents overwriting prior reports.
 
 Always create `Checklist`: `Item No. | Item Name | Check Result | Findings | Coverage`.
 Create `15. HREFLANG` only when at least one result is X: `Address | Issue | Instruction`.

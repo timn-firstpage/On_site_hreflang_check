@@ -90,7 +90,7 @@ python scripts/inspect_homepage.py --config path/to/global-config.json --remaini
 
 ## Excel 输出
 
-文件名：`Onsite_hreflang_{company name}_{YYYY-MM-DD}.xlsx`。
+文件名：`{name}_onsite_hreflang_audit_{date}.xlsx`。`name` 为公司／网站名称，`date` 为 `YYYY-MM-DD`。例如：`Example_onsite_hreflang_audit_2026-10-12.xlsx`。
 
 | Worksheet | 创建条件 | 列 |
 | --- | --- | --- |
