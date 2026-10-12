@@ -15,6 +15,27 @@ def sample():
 
 
 class ReportTests(unittest.TestCase):
+    def test_large_missing_review_has_no_confirmed_issue_rows(self):
+        data = sample()
+        for c in data['checks']:
+            c.update(result='√', evidence_state='available', issues=[])
+        data['checks'][2].update(result='Human check', finding='发现 101 个缺少 hreflang 的 URL，需复核。', instruction='请检查是否有大量参数页或 Screaming Frog 抓取异常。')
+        rows = report_rows(data)
+        self.assertEqual(list(rows), ['Checklist'])
+        self.assertEqual(rows['Checklist'][3][2], 'Human check')
+        self.assertIn('101', rows['Checklist'][3][3])
+        self.assertEqual(rows['Checklist'][3][4], data['checks'][2]['instruction'])
+
+    def test_confirmed_other_filter_issue_can_coexist_with_missing_review(self):
+        data = sample()
+        issue = {'address': 'https://example.com/en/', 'issue': '缺少返回链接；目标：https://example.com/zh/', 'instruction': '请添加指向对应中文页面的 hreflang 链接。'}
+        data['checks'][2].update(result='X', evidence_state='available', finding='发现缺少返回链接；另有 101 个 Missing URL 待复核。', instruction='请补充返回链接，并检查参数页或 SF 抓取异常。', issues=[issue])
+        rows = report_rows(data)
+        self.assertEqual(rows['Checklist'][3][2], 'X')
+        # One 15.2 issue and the confirmed 15.3 return-link defect; no 101 raw Missing rows.
+        self.assertEqual(len(rows['15. HREFLANG']), 3)
+        self.assertIn('缺少返回链接', rows['15. HREFLANG'][2][1])
+
     def test_checklist_separates_instruction_without_coverage(self):
         data = sample()
         for c in data['checks']:

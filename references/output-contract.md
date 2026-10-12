@@ -27,6 +27,7 @@ Filename: `{name}_onsite_hreflang_audit_{date}.xlsx`. Map name to findings.site_
 | Missing SF results | 尚未取得六项 SF 结果，按初审约定暂记 √，未完成验证。 | 请补充六项 SF 导出。 |
 | Homepage HTTP 429 | 首页请求被限流，未检查语言切换。 | 请提供已保存的首页 HTML 或 SF 结果。 |
 | Parameter URLs | 语言版本使用 ?lang=en 参数。 | 可在改版时考虑语言子目录，并评估迁移影响。 |
+| Missing >100 distinct URLs (Human check) | 发现 126 个缺少 hreflang 的 URL，需复核。 | 请检查是否有大量参数页或 Screaming Frog 抓取异常。 |
 
 ## Findings input
 
@@ -53,6 +54,8 @@ The agent reviews evidence and writes JSON. The generator validates and formats 
 ```
 
 The fragment shows one row; real input requires all three. Every finding/instruction must be nonempty. evidence_state is `available`, `partial`, `unavailable` or `not_applicable`. evidence is a list of actual archived references, which may be empty for unavailable or skipped checks.
+
+For large-Missing 15.3 Human check, use `issues: []` and an evidence_state matching export availability, not `not_applicable`. Retain the actual distinct Missing count and review reason in Findings; save the complete export/count summary in evidence. The agent applies the >100 rule from audit-rules.md; the generator formats reviewed results and does not count SF rows. If other filters establish X, include only confirmed defects in issues and keep large unreviewed Missing rows in raw evidence.
 
 X issue object: `{"address":"https://example.com/","issue":"语言版本使用 ?lang=en 参数。","instruction":"可在改版时考虑语言子目录，并评估迁移影响。"}`. Use real source addresses; retain known target URLs/codes in Issue.
 

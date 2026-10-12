@@ -74,7 +74,7 @@ Set a bounded command timeout in the executing tool as well: some restricted env
 - 15.1 √: confirmed multiple versions plus working control evidence; state whether a plain link target or scripted interaction was checked. X: confirmed multiple versions plus demonstrated missing/unusable control. Human check: unresolved evidence, with the exact gap. N/A needs confirmed single language/region.
 - 15.2: use established alternate URLs even if interaction is untested. Parameter targets trigger the agreed gentle X; accepted structures pass. `structure` is heuristic (not a public-suffix or language-code validator); x-default or unrelated tracking URLs do not establish a locale version.
 - Avoid “the tested controls did not produce a verified switch.” Prefer “已找到 /en/ 和 /zh/ 版本；当前环境未安装 JavaScript 运行组件，尚未测试此按钮。” Do not request computer use. If data is sufficient for 15.2, complete it independently.
-- Keep the SF six-filter logic and missing-result √ exception in 15.3 unchanged. No live HTTP requests are needed for report generation from existing findings.
+- Apply the current SF six-filter rules, including the >100 distinct Missing URL review exception and missing-result √ convention. No live HTTP requests are needed for report generation from existing findings.
 
 ## Scope and portability
 
