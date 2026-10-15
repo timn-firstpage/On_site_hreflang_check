@@ -102,7 +102,7 @@ class ReportTests(unittest.TestCase):
         run_root.mkdir(exist_ok=True)
         with tempfile.TemporaryDirectory(dir=run_root) as directory:
             path = build_report(data, directory)
-            self.assertEqual(path.name, 'Demo Company_onsite_hreflang_audit_2026-10-08.xlsx')
+            self.assertEqual(path.name, '15.1-15.3_Demo Company_onsite_hreflang_audit_2026-10-08.xlsx')
             wb = load_workbook(path)
             self.assertEqual(wb['Checklist']['D2'].value, data['checks'][0]['finding'])
             self.assertEqual(wb['Checklist']['D2'].data_type, 's')

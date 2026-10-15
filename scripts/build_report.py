@@ -83,7 +83,7 @@ def build_report(data, output_dir):
     from openpyxl.utils import get_column_letter
     rows = report_rows(data)
     name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', data['site_name']).strip(' .')
-    filename = f"{name}_onsite_hreflang_audit_{data['audit_date']}.xlsx"
+    filename = f"{IDS[0]}-{IDS[-1]}_{name}_onsite_hreflang_audit_{data['audit_date']}.xlsx"
     if not name or len(filename.encode('utf-8')) > 240:
         raise ValueError('Provide a shorter usable company name')
     target = Path(output_dir) / filename

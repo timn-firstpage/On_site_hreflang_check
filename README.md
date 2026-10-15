@@ -114,7 +114,7 @@ python scripts/inspect_homepage.py --config path/to/global-config.json --remaini
 
 ## Excel 输出
 
-文件名：`{name}_onsite_hreflang_audit_{date}.xlsx`，date 为 YYYY-MM-DD。例如 `Example_onsite_hreflang_audit_2026-10-12.xlsx`。
+文件名：`15.1-15.3_{name}_onsite_hreflang_audit_{date}.xlsx`，前缀表示报告覆盖的 checklist 编号范围，date 为 YYYY-MM-DD。例如 `15.1-15.3_Example_onsite_hreflang_audit_2026-10-15.xlsx`。N/A、Human check 或缺少证据不会缩小编号范围。
 
 | Worksheet | 创建条件 | 列 |
 | --- | --- | --- |

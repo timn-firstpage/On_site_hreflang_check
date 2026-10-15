@@ -5,7 +5,7 @@ description: Audit multilingual discovery, locale URL structure and Screaming Fr
 
 # Onsite Hreflang Audit
 
-Produce `{name}_onsite_hreflang_audit_{date}.xlsx` for checks 15.1–15.3, where name is the company/site name and date is YYYY-MM-DD. Read [audit rules](references/audit-rules.md) and [output contract](references/output-contract.md) before judging evidence. These user-selected first-check rules take precedence over generic SEO recommendations.
+Produce `15.1-15.3_{name}_onsite_hreflang_audit_{date}.xlsx` for checks 15.1–15.3, where the prefix is the covered checklist item range, name is the company/site name and date is YYYY-MM-DD. Retain the range when items are N/A, Human check or unverified. Read [audit rules](references/audit-rules.md) and [output contract](references/output-contract.md) before judging evidence. These user-selected first-check rules take precedence over generic SEO recommendations.
 
 ## Workflow
 

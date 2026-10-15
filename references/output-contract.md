@@ -1,6 +1,6 @@
 # Report and findings contract
 
-Filename: `{name}_onsite_hreflang_audit_{date}.xlsx`. Map name to findings.site_name and date to findings.audit_date (YYYY-MM-DD). Sanitize invalid filename characters and reject excessively long names. Use a unique writable run directory; never overwrite prior reports.
+Filename: `15.1-15.3_{name}_onsite_hreflang_audit_{date}.xlsx`. Prefix the covered checklist item range; all three rows are included, so N/A, Human check and unavailable evidence do not shorten it. Map name to findings.site_name and date to findings.audit_date (YYYY-MM-DD). Sanitize invalid filename characters and reject excessively long names. Use a unique writable run directory; never overwrite prior reports.
 
 ## Worksheets
 
